@@ -72,7 +72,7 @@ class bitset final
 
     constexpr bool operator[](std::size_t aPos) const noexcept
     {
-        return data_[aPos / CHAR_BIT] & bitAtIndex(aPos);
+        return std::to_integer<bool>(data_[aPos / CHAR_BIT] & bitAtIndex(aPos));
     }
 
     constexpr reference operator[](std::size_t aPos) noexcept
@@ -176,29 +176,47 @@ class bitset final
     }
 
    private:
-    constexpr bitset(std::array<uint8_t, kNumBytes> aData) noexcept
+    constexpr bitset(std::array<std::byte, kNumBytes> aData) noexcept
         : data_(aData)
     {
     }
 
     template <typename T, std::size_t... I>
-    constexpr uint8_t byte_from_bits(std::size_t aByteIndex, T&& aBits,
-                                     std::index_sequence<I...>) noexcept
+    constexpr std::byte byte_from_bits(std::size_t aByteIndex, T&& aBits,
+                                       std::index_sequence<I...>) noexcept
     {
         static_assert(sizeof...(I) > 0, "sizeof...(I) must be greater than 0");
         static_assert(sizeof...(I) <= CHAR_BIT,
                       "sizeof...(I) must be less or equal than CHAR_BIT(8)");
-        return static_cast<uint8_t>((
-            ... |
-            (aByteIndex * CHAR_BIT + I >= aBits.size()
-                 ? 0
-                 : ((aBits[aBits.size() - 1 - aByteIndex * CHAR_BIT - I] == '0')
-                        ? 0
-                        : (1 << I)))));
+        auto to_char = [](auto&& aValue) -> char
+        {
+            constexpr bool is_byte =
+                std::is_same_v<utils::remove_cvref_t<decltype(aValue)>,
+                               std::byte>;
+            constexpr bool is_char =
+                std::is_same_v<utils::remove_cvref_t<decltype(aValue)>, char>;
+            static_assert(is_byte || is_char, "aValue has unsupported type");
+            if constexpr (is_byte)
+            {
+                return std::to_integer<char>(aValue);
+            }
+            else
+            {
+                return aValue;
+            }
+        };
+
+        return std::byte{
+            (... | (aByteIndex * CHAR_BIT + I >= aBits.size()
+                        ? std::byte{0}
+                        : ((to_char(aBits[aBits.size() - 1 -
+                                          aByteIndex * CHAR_BIT - I]) == '0')
+                               ? std::byte{0}
+                               : (std::byte{1} << I))))};
     }
 
     template <typename T, std::size_t... I>
-    constexpr std::array<uint8_t, sizeof...(I)> make_bitset_array(
+    constexpr std::array<std::byte, sizeof...(I)> make_bitset_array(
         T&& aBits, std::index_sequence<I...>) noexcept
     {
         return {byte_from_bits(I, std::forward<T>(aBits),
@@ -215,17 +233,17 @@ class bitset final
         return make_bitset_array(std::forward<T>(aBits), Indices{});
     }
 
-    inline constexpr uint8_t bitAtIndex(std::size_t aPos) const noexcept
+    inline constexpr std::byte bitAtIndex(std::size_t aPos) const noexcept
     {
-        return static_cast<uint8_t>(uint8_t(1) << (aPos % CHAR_BIT));
+        return std::byte{1} << (aPos % CHAR_BIT);
     }
 
-    inline constexpr uint8_t cutUnrelatedMask() const noexcept
+    inline constexpr std::byte cutUnrelatedMask() const noexcept
     {
-        return static_cast<uint8_t>(uint8_t(~0) >> (CHAR_BIT - N % CHAR_BIT));
+        return ~std::byte{0} >> (CHAR_BIT - N % CHAR_BIT);
     }
 
-    inline constexpr uint8_t lastByteValue() const noexcept
+    inline constexpr std::byte lastByteValue() const noexcept
     {
         return data_[kNumBytes - 1] & cutUnrelatedMask();
     }
@@ -240,7 +258,7 @@ class bitset final
     template <std::size_t... I>
     constexpr std::size_t bitsCount(std::index_sequence<I...>) const noexcept
     {
-        return (... + (kNumBitsTable[data_[I]]));
+        return (... + (kNumBitsTable[std::to_integer<std::size_t>(data_[I])]));
     }
 
     template <std::size_t... I>
@@ -252,7 +270,7 @@ class bitset final
     template <std::size_t... I>
     constexpr bool isAnyBitSet(std::index_sequence<I...>) const noexcept
     {
-        return (... || kNumBitsTable[data_[I]]);
+        return (... || kNumBitsTable[std::to_integer<std::size_t>(data_[I])]);
     }
 
     template <std::size_t... I>
@@ -280,20 +298,18 @@ class bitset final
     constexpr decltype(auto) make_flipped_array(
         std::index_sequence<I...>) const noexcept
     {
-        return std::array<uint8_t, kNumBytes>{
-            static_cast<uint8_t>(~data_[I])...};
+        return std::array<std::byte, kNumBytes>{(~data_[I])...};
     }
 
     template <std::size_t... I>
     constexpr decltype(auto) make_flipped_array(
-        std::index_sequence<I...>, const uint8_t aLast) const noexcept
+        std::index_sequence<I...>, const std::byte aLast) const noexcept
     {
-        return std::array<uint8_t, kNumBytes>{
-            static_cast<uint8_t>(~data_[I])...,
-            static_cast<uint8_t>(aLast ^ cutUnrelatedMask())};
+        return std::array<std::byte, kNumBytes>{(~data_[I])...,
+                                                aLast ^ cutUnrelatedMask()};
     }
 
-    std::array<uint8_t, kNumBytes> data_{};
+    std::array<std::byte, kNumBytes> data_{};
 };
 
 template <std::size_t N>

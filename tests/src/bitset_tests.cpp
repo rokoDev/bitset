@@ -1,23 +1,22 @@
+#include <bitset/bitset.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <utils/utils.h>
-
-#include "bitset/bitset.h"
 
 namespace
 {
 template <std::size_t N>
 using bitset = utils::bitset<N>;
 
+using namespace std::string_view_literals;
+
 class BitsetTestMultiData : public ::testing::Test
 {
    protected:
     static constexpr auto kMaskStrings = utils::make_array(
-        std::string_view("0111001101"), std::string_view("11100111001101"),
-        std::string_view("1111000011001100"), std::string_view("0"),
-        std::string_view("1"), std::string_view("11111111"),
-        std::string_view("00000000"), std::string_view("010101010"),
-        std::string_view("11110000110011001"), std::string_view("01011"));
+        "0111001101"sv, "11100111001101"sv, "1111000011001100"sv, "0"sv, "1"sv,
+        "11111111"sv, "00000000"sv, "010101010"sv, "11110000110011001"sv,
+        "01011"sv);
     template <typename Callable, std::size_t... I>
     void run_bitsets_tests(Callable &&aFunc, std::index_sequence<I...>) noexcept
     {

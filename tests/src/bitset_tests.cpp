@@ -3,6 +3,33 @@
 #include <gtest/gtest.h>
 #include <utils/utils.h>
 
+#include <bitset>
+#include <variant>
+
+#ifdef BOOST_LEAF_NO_EXCEPTIONS
+
+#include <iostream>
+
+namespace boost
+{
+[[noreturn]] void throw_exception(std::exception const &e)
+{
+    std::cerr
+        << "Terminating due to a C++ exception under BOOST_LEAF_NO_EXCEPTIONS: "
+        << e.what();
+    std::terminate();
+}
+
+struct source_location;
+[[noreturn]] void throw_exception(std::exception const &e,
+                                  boost::source_location const &)
+{
+    throw_exception(e);
+}
+}  // namespace boost
+
+#endif
+
 namespace
 {
 template <std::size_t N>
@@ -207,4 +234,51 @@ TEST_F(BitsetTestMultiData, Flip)
 
     using Indices = std::make_index_sequence<kMaskStrings.size()>;
     run_bitsets_tests(bitset_test, Indices{});
+}
+
+TEST(BitsetTests, Test)
+{
+    std::variant<utils::eBitsetError> error;
+    std::size_t invalid_pos{};
+    std::size_t errors_count{};
+    auto handle_errors = std::make_tuple(
+        [&error, &invalid_pos, &errors_count](
+            boost::leaf::match<utils::eBitsetError,
+                               utils::eBitsetError::out_of_range>,
+            std::size_t, std::size_t aPos, const utils::e_source_location &)
+        {
+            error = utils::eBitsetError::out_of_range;
+            invalid_pos = aPos;
+            ++errors_count;
+            return false;
+        },
+        [&errors_count](boost::leaf::diagnostic_info const &aUnmatched)
+        {
+            std::cerr << "Unknown failure detected\n"
+                      << "Cryptic diagnostic information follows\n"
+                      << aUnmatched;
+            ++errors_count;
+            return false;
+        });
+
+    bitset<10> b{"0000000000"sv};
+    ASSERT_TRUE(b.test(0).has_value());
+    ASSERT_FALSE(b.test(b.size()).has_value());
+    boost::leaf::try_handle_all(
+        [&b]() -> utils::result<bool>
+        {
+            [[maybe_unused]] bool bit{};
+            for (std::size_t i = 0; i <= b.size(); ++i)
+            {
+                BOOST_LEAF_ASSIGN(bit, b.test(i));
+            }
+            return {};
+        },
+        handle_errors);
+
+    ASSERT_TRUE(std::holds_alternative<utils::eBitsetError>(error));
+    ASSERT_EQ(std::get<utils::eBitsetError>(error),
+              utils::eBitsetError::out_of_range);
+    ASSERT_EQ(invalid_pos, b.size());
+    ASSERT_EQ(errors_count, 1);
 }

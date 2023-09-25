@@ -3,12 +3,25 @@
 
 #include <utils/utils.h>
 
+#include <boost/leaf.hpp>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
 
 namespace utils
 {
+namespace leaf = boost::leaf;
+
+template <class T>
+using result = leaf::result<T>;
+
+using e_source_location = leaf::e_source_location;
+
+enum class eBitsetError
+{
+    out_of_range
+};
+
 template <std::size_t N>
 class bitset final
 {
@@ -172,6 +185,19 @@ class bitset final
         {
             using Indices = std::make_index_sequence<kNumBytes>;
             return bitset<N>(make_flipped_array(Indices{}));
+        }
+    }
+
+    result<bool> test(std::size_t aPos) const noexcept
+    {
+        if (aPos < this->size())
+        {
+            return this->operator[](aPos);
+        }
+        else
+        {
+            return BOOST_LEAF_NEW_ERROR(eBitsetError::out_of_range,
+                                        this->size(), aPos);
         }
     }
 

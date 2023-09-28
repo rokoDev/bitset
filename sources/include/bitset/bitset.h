@@ -387,7 +387,7 @@ class bitset final
         }
         else
         {
-            memmove(aDst, aSrc, aBytesToShift);
+            memory::memmove(aDst, aSrc, aBytesToShift);
         }
     }
 

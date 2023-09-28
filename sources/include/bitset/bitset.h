@@ -3,10 +3,13 @@
 
 #include <utils/utils.h>
 
+#include <array>
 #include <boost/leaf.hpp>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <utility>
 
 namespace utils
 {
@@ -21,6 +24,74 @@ enum class eBitsetError
 {
     out_of_range
 };
+
+namespace details
+{
+namespace bitset
+{
+inline constexpr void validate_shift_args(
+    [[maybe_unused]] std::byte* aDst, [[maybe_unused]] std::byte const* aSrc,
+    [[maybe_unused]] const std::size_t aNumBits) noexcept
+{
+    assert(aDst);
+    assert(aSrc);
+    assert(aNumBits < CHAR_BIT);
+}
+
+using shifter_t = void (*)(std::byte*, std::byte const*,
+                           const std::size_t) noexcept;
+
+template <std::size_t NBytes>
+constexpr void right_shift_bytes(std::byte* aDst, std::byte const* aSrc,
+                                 const std::size_t aNumBits) noexcept
+{
+    static_assert(NBytes > 0);
+    static_assert(NBytes <= sizeof(std::uint64_t));
+    validate_shift_args(aDst, aSrc, aNumBits);
+    integral_to_bytes<NBytes>(
+        aDst, shift_right(bytes_to_integral<NBytes, FastUInt<NBytes>>(aSrc),
+                          aNumBits));
+}
+
+template <std::size_t... I>
+constexpr decltype(auto) make_right_shifter_array(
+    std::index_sequence<I...>) noexcept
+{
+    static_assert(sizeof...(I) > 0);
+    static_assert(sizeof...(I) <= sizeof(std::uint64_t));
+    return std::array<shifter_t, sizeof...(I)>{right_shift_bytes<I + 1>...};
+}
+
+inline constexpr auto right_shifters =
+    make_right_shifter_array(std::make_index_sequence<sizeof(std::uint64_t)>{});
+
+using shifters_array_t = decltype(right_shifters);
+
+template <std::size_t NBytes>
+constexpr void left_shift_bytes(std::byte* aDst, std::byte const* aSrc,
+                                const std::size_t aNumBits) noexcept
+{
+    static_assert(NBytes > 0);
+    static_assert(NBytes <= sizeof(std::uint64_t));
+    validate_shift_args(aDst, aSrc, aNumBits);
+    integral_to_bytes<NBytes>(
+        aDst, shift_left(bytes_to_integral<NBytes, FastUInt<NBytes>>(aSrc),
+                         aNumBits));
+}
+
+template <std::size_t... I>
+constexpr decltype(auto) make_left_shifter_array(
+    std::index_sequence<I...>) noexcept
+{
+    static_assert(sizeof...(I) > 0);
+    static_assert(sizeof...(I) <= sizeof(std::uint64_t));
+    return std::array<shifter_t, sizeof...(I)>{left_shift_bytes<I + 1>...};
+}
+
+inline constexpr auto left_shifters =
+    make_left_shifter_array(std::make_index_sequence<sizeof(std::uint64_t)>{});
+}  // namespace bitset
+}  // namespace details
 
 template <std::size_t N>
 class bitset final
@@ -201,10 +272,123 @@ class bitset final
         }
     }
 
+    constexpr bitset operator<<(std::size_t aPos) const noexcept
+    {
+        assert(aPos <= this->size());
+        bitset ret;
+        if (aPos < this->size())
+        {
+            left_shift_helper(ret.data_.data(), aPos);
+        }
+        return ret;
+    }
+
+    constexpr bitset& operator<<=(const std::size_t aPos) noexcept
+    {
+        assert(aPos <= this->size());
+        if (aPos < this->size())
+        {
+            const auto zero_count = left_shift_helper(data_.data(), aPos);
+            memory::secure_zero_memory(data_.data(), zero_count);
+        }
+        else
+        {
+            memory::secure_zero_memory(data_.data(), data_.size());
+        }
+        return *this;
+    }
+
+    constexpr bitset operator>>(std::size_t aPos) const noexcept
+    {
+        assert(aPos <= this->size());
+        bitset ret;
+        if (aPos < this->size())
+        {
+            right_shift_helper(ret.data_.data(), aPos);
+        }
+        return ret;
+    }
+
+    constexpr bitset& operator>>=(const std::size_t aPos) noexcept
+    {
+        assert(aPos <= this->size());
+        if (aPos < this->size())
+        {
+            const auto [zero_count, bytes_to_shift] =
+                right_shift_helper(data_.data(), aPos);
+            memory::secure_zero_memory(data_.data() + bytes_to_shift,
+                                       zero_count);
+        }
+        else
+        {
+            memory::secure_zero_memory(data_.data(), data_.size());
+        }
+        return *this;
+    }
+
+    constexpr std::byte const* data() const noexcept { return data_.data(); }
+
    private:
+    using shifters_array_t = details::bitset::shifters_array_t;
+
     constexpr bitset(std::array<std::byte, kNumBytes> aData) noexcept
         : data_(aData)
     {
+    }
+
+    constexpr std::size_t left_shift_helper(std::byte* aDst,
+                                            std::size_t aPos) const noexcept
+    {
+        using details::bitset::left_shifters;
+        const auto [quot, rem] = div(static_cast<int>(aPos), CHAR_BIT);
+        std::size_t bytes_to_shift =
+            data_.size() - static_cast<std::size_t>(quot);
+        auto dst = aDst + quot;
+        shift_helper(dst, data(), bytes_to_shift, rem, left_shifters,
+                     left_shifter);
+        return static_cast<std::size_t>(quot);
+    }
+
+    constexpr decltype(auto) right_shift_helper(std::byte* aDst,
+                                                std::size_t aPos) const noexcept
+    {
+        using details::bitset::right_shifters;
+        const auto [quot, rem] = div(static_cast<int>(aPos), CHAR_BIT);
+        std::size_t bytes_to_shift =
+            data_.size() - static_cast<std::size_t>(quot);
+        auto src = this->data() + quot;
+        shift_helper(aDst, src, bytes_to_shift, rem, right_shifters,
+                     right_shifter);
+        return std::make_tuple(static_cast<std::size_t>(quot), bytes_to_shift);
+    }
+
+    template <typename T>
+    static constexpr void shift_helper(std::byte* aDst, std::byte const* aSrc,
+                                       std::size_t aBytesToShift, int aRem,
+                                       shifters_array_t& aShifters,
+                                       T&& aShiftOp) noexcept
+    {
+        if (aRem)
+        {
+            const std::size_t bytes_to_write = bytes_to_read - 1;
+            while (aBytesToShift > bytes_to_read)
+            {
+                auto value = aShiftOp(
+                    bytes_to_integral<bytes_to_read, FastUInt<bytes_to_read>>(
+                        aSrc),
+                    static_cast<std::size_t>(aRem));
+                integral_to_bytes<bytes_to_write>(aDst, std::move(value));
+                aBytesToShift -= bytes_to_write;
+                aSrc += bytes_to_write;
+                aDst += bytes_to_write;
+            }
+            aShifters[aBytesToShift - 1](aDst, aSrc,
+                                         static_cast<std::size_t>(aRem));
+        }
+        else
+        {
+            memmove(aDst, aSrc, aBytesToShift);
+        }
     }
 
     template <typename T, std::size_t... I>
@@ -335,6 +519,12 @@ class bitset final
                                                 aLast ^ cutUnrelatedMask()};
     }
 
+    static inline constexpr auto bytes_to_read = sizeof(std::uint64_t);
+    using ValueT =
+        decltype(bytes_to_integral<bytes_to_read, FastUInt<bytes_to_read>>(
+            nullptr));
+    static inline constexpr auto left_shifter = &shift_left<ValueT>;
+    static inline constexpr auto right_shifter = &shift_right<ValueT>;
     std::array<std::byte, kNumBytes> data_{};
 };
 

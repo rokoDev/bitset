@@ -7,7 +7,7 @@ cmake_path(APPEND FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/../" "deps_content"
 FetchContent_Declare(
 	utils
 	GIT_REPOSITORY https://github.com/rokoDev/utils.git
-	GIT_TAG        ff92947f995ac89c9ddc2d16bca83ed089717a2f
+	GIT_TAG        43a19e2b68097c841d6d37ff9f75f90393dd33ca
 )
 
 FetchContent_Declare(

@@ -282,3 +282,104 @@ TEST(BitsetTests, Test)
     ASSERT_EQ(invalid_pos, b.size());
     ASSERT_EQ(errors_count, 1);
 }
+
+TEST(BitsetTests, RightShiftBy0Bits)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 0;
+    ASSERT_EQ(b2, bitset<32>{"10110101100000010110011011000011"sv});
+}
+
+TEST(BitsetTests, RightShiftBy8Bits)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 8;
+    ASSERT_EQ(b2, bitset<32>{"00000000101101011000000101100110"sv});
+}
+
+TEST(BitsetTests, RightShiftBy16Bits)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 16;
+    ASSERT_EQ(b2, bitset<32>{"00000000000000001011010110000001"sv});
+}
+
+TEST(BitsetTests, RightShiftBy24Bits)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 24;
+    ASSERT_EQ(b2, bitset<32>{"00000000000000000000000010110101"sv});
+}
+
+TEST(BitsetTests, RightShiftBy32Bits)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 32;
+    ASSERT_EQ(b2, bitset<32>{"00000000000000000000000000000000"sv});
+}
+
+TEST(BitsetTests, RightShiftBy1Bit)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 1;
+    ASSERT_EQ(b2, bitset<32>{"01011010110000001011001101100001"sv});
+}
+
+TEST(BitsetTests, RightShiftAssignBy17Bit)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 >>= 17;
+    ASSERT_EQ(b2, bitset<32>{"00000000000000000101101011000000"sv});
+}
+
+TEST(BitsetTests, RightShiftBy17Bit)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    ASSERT_EQ(b2 >> 17, bitset<32>{"00000000000000000101101011000000"sv});
+}
+
+TEST(BitsetTests, LeftShiftBy1Bit)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 <<= 1;
+    ASSERT_EQ(b2, bitset<32>{"01101011000000101100110110000110"sv});
+}
+
+TEST(BitsetTests, LeftShiftAssignBy17Bit)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    b2 <<= 17;
+    ASSERT_EQ(b2, bitset<32>{"11001101100001100000000000000000"sv});
+}
+
+TEST(BitsetTests, LeftShiftBy17Bit)
+{
+    bitset<32> b2{"10110101100000010110011011000011"sv};
+    ASSERT_EQ(b2 << 17, bitset<32>{"11001101100001100000000000000000"sv});
+}
+
+TEST(BitsetTests, ConstexprRightShiftAndAssign)
+{
+    auto right_shift_and_assign = [](std::size_t aPos) noexcept -> bitset<32>
+    {
+        bitset<32> b2{"10110101100000010110011011000011"sv};
+        b2 >>= aPos;
+        return b2;
+    };
+
+    constexpr bitset<32> b = right_shift_and_assign(17);
+    ASSERT_EQ(b, bitset<32>{"00000000000000000101101011000000"sv});
+}
+
+TEST(BitsetTests, ConstexprLeftShiftAndAssign)
+{
+    auto right_shift_and_assign = [](std::size_t aPos) noexcept -> bitset<32>
+    {
+        bitset<32> b2{"10110101100000010110011011000011"sv};
+        b2 <<= aPos;
+        return b2;
+    };
+
+    constexpr bitset<32> b = right_shift_and_assign(17);
+    ASSERT_EQ(b, bitset<32>{"11001101100001100000000000000000"sv});
+}
